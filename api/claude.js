@@ -20,9 +20,19 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Faltan ref o name' });
   }
 
+  const cleanRef = String(ref).trim();
+  const cleanName = String(name).trim();
+
+  const nikeSearchUrls = buildNikeSearchUrls(cleanRef);
+
   try {
-    // PASO 1: Encontrar URL oficial de Nike
-    const findResult = await findNikeUrl({ apiKey, ref, name });
+    // PASO 1: localizar URL del producto usando URLs de búsqueda ya construidas
+    const findResult = await findNikeProductUrl({
+      apiKey,
+      ref: cleanRef,
+      name: cleanName,
+      nikeSearchUrls
+    });
 
     if (findResult.status !== 'OK' || !findResult.url_nike) {
       return res.status(200).json({
@@ -32,11 +42,11 @@ export default async function handler(req, res) {
       });
     }
 
-    // PASO 2: Generar descripción usando la URL encontrada
+    // PASO 2: generar descripción usando la URL del producto encontrada
     const descResult = await generateDescription({
       apiKey,
-      ref,
-      name,
+      ref: cleanRef,
+      name: cleanName,
       url_nike: findResult.url_nike
     });
 
@@ -73,7 +83,16 @@ export default async function handler(req, res) {
   }
 }
 
-async function findNikeUrl({ apiKey, ref, name }) {
+function buildNikeSearchUrls(ref) {
+  const q = encodeURIComponent(ref);
+
+  return [
+    `https://www.nike.com/w?q=${q}&vst=${q}`,
+    `https://www.nike.com/us/es/w?q=${q}&vst=${q}`
+  ];
+}
+
+async function findNikeProductUrl({ apiKey, ref, name, nikeSearchUrls }) {
   const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -110,14 +129,16 @@ async function findNikeUrl({ apiKey, ref, name }) {
         {
           role: 'system',
           content: `
-Eres un asistente que localiza productos Nike por referencia exacta.
+Eres un asistente que localiza páginas oficiales de productos Nike usando una referencia exacta.
 
 REGLAS:
-- Busca una URL oficial de Nike para la referencia exacta.
-- Prioriza coincidencia exacta de la referencia sobre el nombre.
-- Solo acepta dominios oficiales de Nike.
-- Si encuentras una URL oficial razonablemente confiable, responde status "OK".
-- Si no la encuentras, responde status "NO_ENCONTRADO".
+- NO busques desde cero libremente.
+- Usa primero las URLs de búsqueda Nike proporcionadas por el usuario.
+- Intenta localizar la página oficial del producto a partir de esas búsquedas.
+- Prioriza coincidencia exacta de la referencia.
+- Solo acepta URLs oficiales de Nike del producto, no la URL de búsqueda.
+- Si encuentras una URL del producto claramente asociada a la referencia, responde "OK".
+- Si no puedes encontrar una URL del producto confiable, responde "NO_ENCONTRADO".
 - Devuelve SOLO JSON válido.
           `.trim()
         },
@@ -127,10 +148,14 @@ REGLAS:
 Referencia exacta: "${ref}"
 Nombre: "${name}"
 
+Prueba estas búsquedas Nike:
+1. ${nikeSearchUrls[0]}
+2. ${nikeSearchUrls[1]}
+
 Devuelve este formato:
 {
   "status": "OK" o "NO_ENCONTRADO",
-  "url_nike": "URL oficial de Nike o cadena vacía"
+  "url_nike": "URL oficial del producto Nike o cadena vacía"
 }
           `.trim()
         }
@@ -166,9 +191,10 @@ Devuelve este formato:
   }
 
   if (status === 'OK') {
-    if (!url_nike || !isNikeUrl(url_nike)) {
+    if (!url_nike || !isNikeProductUrl(url_nike, ref)) {
       return { status: 'NO_ENCONTRADO', url_nike: '' };
     }
+
     return { status: 'OK', url_nike };
   }
 
@@ -279,7 +305,6 @@ Devuelve este formato:
 }
 
 function extractStructuredContent(data) {
-  // Si el modelo devuelve contenido como string JSON
   const raw = data?.choices?.[0]?.message?.content?.trim();
 
   if (!raw) return null;
@@ -309,10 +334,15 @@ function normalizeDescription(text) {
     .trim();
 }
 
-function isNikeUrl(url) {
+function isNikeProductUrl(url, ref) {
   try {
     const parsed = new URL(url);
-    return /(^|\.)nike\./i.test(parsed.hostname);
+
+    if (!/(^|\.)nike\./i.test(parsed.hostname)) return false;
+    if (/\/w\?/i.test(parsed.pathname + parsed.search)) return false;
+
+    const full = `${parsed.pathname}${parsed.search}${parsed.hash}`.toUpperCase();
+    return full.includes(String(ref).toUpperCase());
   } catch {
     return false;
   }
