@@ -1,0 +1,8 @@
+{
+  "name": "nike-description-automation",
+  "version": "1.0.0",
+  "description": "Automatización de descripciones Nike con IA",
+  "engines": {
+    "node": ">=18"
+  }
+}

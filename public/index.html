@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nike Description Automation</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #2a2a2a;
+    --accent: #f5ff00;
+    --text: #e8e8e8;
+    --muted: #666;
+    --success: #00e676;
+    --warning: #ffab40;
+    --error: #ff5252;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    min-height: 100vh;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(245,255,0,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(245,255,0,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .container { position: relative; z-index: 1; max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  header {
+    display: flex;
+    align-items: flex-end;
+    gap: 20px;
+    margin-bottom: 48px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 24px;
+  }
+  .logo { font-family: 'Bebas Neue', sans-serif; font-size: 56px; color: var(--accent); letter-spacing: 2px; line-height: 1; }
+  .logo span { color: var(--muted); font-size: 20px; display: block; font-family: 'IBM Plex Mono', monospace; letter-spacing: 4px; margin-top: 4px; }
+  .status-bar { margin-left: auto; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); text-align: right; line-height: 1.8; }
+  .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--muted); margin-right: 6px; vertical-align: middle; }
+  .dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.5} }
+  .upload-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 40px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .2s;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .upload-section::after { content:''; position:absolute; top:0; left:0; width:3px; height:100%; background:var(--accent); opacity:0; transition:opacity .2s; }
+  .upload-section:hover, .upload-section.drag-over { border-color:var(--accent); background:var(--surface2); }
+  .upload-section:hover::after, .upload-section.drag-over::after { opacity:1; }
+  .upload-icon { font-size:40px; margin-bottom:16px; display:block; }
+  .upload-title { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:2px; margin-bottom:8px; }
+  .upload-sub { font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace; }
+  #fileInput { display:none; }
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--border); margin-bottom:24px; }
+  .stat-box { background:var(--surface); padding:20px 24px; }
+  .stat-label { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; margin-bottom:8px; }
+  .stat-value { font-family:'Bebas Neue',sans-serif; font-size:42px; line-height:1; }
+  .stat-value.yellow{color:var(--accent)} .stat-value.green{color:var(--success)} .stat-value.orange{color:var(--warning)}
+  .controls { display:flex; gap:12px; margin-bottom:24px; flex-wrap:wrap; align-items:center; }
+  .btn { font-family:'Bebas Neue',sans-serif; font-size:18px; letter-spacing:2px; padding:12px 28px; border:none; cursor:pointer; transition:all .15s; border-radius:1px; display:flex; align-items:center; gap:8px; }
+  .btn-primary { background:var(--accent); color:#000; }
+  .btn-primary:hover:not(:disabled) { background:#fff; transform:translateY(-1px); }
+  .btn-secondary { background:transparent; color:var(--text); border:1px solid var(--border); }
+  .btn-secondary:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+  .btn-danger { background:transparent; color:var(--error); border:1px solid var(--error); }
+  .btn-danger:hover:not(:disabled) { background:var(--error); color:#000; }
+  .btn:disabled { opacity:.3; cursor:not-allowed; }
+  .progress-wrap { background:var(--surface); border:1px solid var(--border); height:4px; margin-bottom:8px; overflow:hidden; }
+  .progress-fill { height:100%; background:var(--accent); transition:width .4s ease; box-shadow:0 0 12px var(--accent); }
+  .progress-label { font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--muted); margin-bottom:16px; }
+  .table-wrap { background:var(--surface); border:1px solid var(--border); overflow:hidden; border-radius:2px; }
+  .table-header { display:grid; grid-template-columns:140px 200px 70px 1fr 60px; background:var(--surface2); border-bottom:1px solid var(--border); }
+  .th { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:2px; color:var(--muted); text-transform:uppercase; padding:14px 16px; border-right:1px solid var(--border); }
+  .th:last-child{border-right:none}
+  .table-body { max-height:480px; overflow-y:auto; }
+  .table-body::-webkit-scrollbar{width:4px} .table-body::-webkit-scrollbar-track{background:var(--surface)} .table-body::-webkit-scrollbar-thumb{background:var(--border)}
+  .row { display:grid; grid-template-columns:140px 200px 70px 1fr 60px; border-bottom:1px solid var(--border); transition:background .15s; min-height:52px; }
+  .row:hover{background:var(--surface2)} .row:last-child{border-bottom:none}
+  .cell { padding:10px 16px; font-size:12px; border-right:1px solid var(--border); display:flex; align-items:flex-start; overflow:hidden; }
+  .cell:last-child{border-right:none; align-items:center; justify-content:center;}
+  .cell-ref{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--accent);font-weight:500}
+  .badge { display:inline-flex; align-items:center; gap:5px; font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:1px; padding:4px 8px; border-radius:1px; text-transform:uppercase; white-space:nowrap; }
+  .badge-ok      { background:rgba(0,230,118,.1);  color:var(--success); border:1px solid rgba(0,230,118,.2); }
+  .badge-empty   { background:rgba(255,171,64,.1); color:var(--warning); border:1px solid rgba(255,171,64,.2); }
+  .badge-processing { background:rgba(245,255,0,.1); color:var(--accent); border:1px solid rgba(245,255,0,.2); animation:blink 1s infinite; }
+  .badge-done    { background:rgba(0,230,118,.15); color:var(--success); border:1px solid rgba(0,230,118,.3); }
+  .badge-error   { background:rgba(255,82,82,.1);  color:var(--error);   border:1px solid rgba(255,82,82,.2); }
+  .desc-preview { font-size:11px; color:var(--text); line-height:1.5; white-space:pre-line; max-height:72px; overflow:hidden; }
+  .info-bar { background:rgba(245,255,0,.05); border:1px solid rgba(245,255,0,.15); border-radius:2px; padding:12px 16px; font-size:12px; color:var(--accent); font-family:'IBM Plex Mono',monospace; margin-bottom:16px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .rate-control { display:flex; align-items:center; gap:8px; margin-left:auto; font-size:11px; color:var(--muted); }
+  .rate-control input { background:var(--surface2); border:1px solid var(--border); color:var(--accent); font-family:'IBM Plex Mono',monospace; font-size:13px; padding:4px 8px; width:60px; text-align:center; border-radius:1px; }
+  .rate-control input:focus{outline:none;border-color:var(--accent)}
+  .log-panel { background:var(--surface); border:1px solid var(--border); border-top:none; font-family:'IBM Plex Mono',monospace; font-size:11px; max-height:180px; overflow-y:auto; padding:12px 16px; }
+  .log-line { padding:2px 0; color:var(--muted); border-bottom:1px solid rgba(255,255,255,.03); display:flex; gap:12px; }
+  .log-time{color:rgba(245,255,0,.4);flex-shrink:0} .log-ok{color:var(--success)} .log-err{color:var(--error)} .log-info{color:var(--accent)}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">
+      NIKE AUTO
+      <span>DESCRIPTION ENGINE</span>
+    </div>
+    <div class="status-bar">
+      <div><span class="dot active"></span> API PROXY ACTIVO</div>
+      <div><span class="dot" id="fileDot"></span> <span id="fileName">SIN ARCHIVO</span></div>
+    </div>
+  </header>
+  <div class="upload-section" id="uploadZone" onclick="document.getElementById('fileInput').click()">
+    <span class="upload-icon">📁</span>
+    <div class="upload-title">Arrastra tu Excel o haz click aquí</div>
+    <div class="upload-sub">Formato .xlsx — columnas: referencia / nombre / descripción</div>
+    <input type="file" id="fileInput" accept=".xlsx,.xls">
+  </div>
+  <div class="stats-row hidden" id="statsRow">
+    <div class="stat-box"><div class="stat-label">Total SKUs</div><div class="stat-value yellow" id="statTotal">0</div></div>
+    <div class="stat-box"><div class="stat-label">Con descripción</div><div class="stat-value green" id="statFilled">0</div></div>
+    <div class="stat-box"><div class="stat-label">Sin descripción</div><div class="stat-value orange" id="statEmpty">0</div></div>
+    <div class="stat-box"><div class="stat-label">Procesados</div><div class="stat-value" id="statDone">0</div></div>
+  </div>
+  <div class="hidden" id="controlsWrap">
+    <div class="info-bar">
+      ⚡ Busca en Nike.com vía IA para cada referencia vacía
+      <div class="rate-control">
+        DELAY (seg) <input type="number" id="delayInput" value="2" min="1" max="10">
+      </div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-primary" id="btnStart" onclick="startProcessing()">▶ INICIAR AUTOMATIZACIÓN</button>
+      <button class="btn btn-danger hidden" id="btnStop" onclick="stopProcessing()">■ DETENER</button>
+      <button class="btn btn-secondary hidden" id="btnDownload" onclick="downloadExcel()">⬇ DESCARGAR EXCEL</button>
+      <button class="btn btn-secondary" onclick="resetAll()">↺ NUEVO ARCHIVO</button>
+    </div>
+    <div id="progressWrap" class="hidden">
+      <div class="progress-wrap"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      <div class="progress-label" id="progressLabel">Preparando...</div>
+    </div>
+  </div>
+  <div class="table-wrap hidden" id="tableWrap">
+    <div class="table-header">
+      <div class="th">Referencia</div>
+      <div class="th">Nombre</div>
+      <div class="th">Estado</div>
+      <div class="th">Descripción</div>
+      <div class="th">—</div>
+    </div>
+    <div class="table-body" id="tableBody"></div>
+  </div>
+  <div class="log-panel hidden" id="logPanel"></div>
+</div>
+
+<script>
+let allRows = [], isRunning = false, shouldStop = false;
+// ── File handling ──────────────────────────────────────────────────────────
+document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e => { e.preventDefault(); zone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]); });
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    allRows = [];
+    for (let i = 1; i < data.length; i++) {
+      const r = data[i];
+      if (!r[0]) continue;
+      allRows.push({
+        ref: r[0] || '',
+        name: r[1] || '',
+        desc: r[2] || '',
+        status: r[2] ? 'ok' : 'empty',
+        exportStatus: '',
+        url_nike: ''
+      });
+    }
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('fileDot').className = 'dot active';
+    hide('uploadZone');
+    updateStats(); renderTable();
+    show('statsRow'); show('controlsWrap'); show('tableWrap'); show('logPanel');
+    log('info', `Cargado: ${allRows.length} productos — ${allRows.filter(r=>!r.desc).length} sin descripción`);
+  };
+  reader.readAsArrayBuffer(file);
+}
+// ── Stats ──────────────────────────────────────────────────────────────────
+function updateStats() {
+  document.getElementById('statTotal').textContent  = allRows.length;
+  document.getElementById('statFilled').textContent =
+    allRows.filter(r => r.desc && ['ok', 'done'].includes(r.status)).length;
+  document.getElementById('statEmpty').textContent =
+    allRows.filter(r => !r.desc && r.status === 'empty').length;
+  document.getElementById('statDone').textContent   = allRows.filter(r=>r.status==='done').length;
+}
+// ── Table ──────────────────────────────────────────────────────────────────
+function renderTable() {
+  const body = document.getElementById('tableBody');
+  body.innerHTML = '';
+  allRows.forEach((row, idx) => {
+    const tr = document.createElement('div');
+    tr.className = 'row'; tr.id = `row-${idx}`;
+    tr.innerHTML = rowHTML(row);
+    body.appendChild(tr);
+  });
+}
+function updateRow(idx) {
+  const tr = document.getElementById(`row-${idx}`);
+  if (tr) { tr.innerHTML = rowHTML(allRows[idx]); if (allRows[idx].status==='processing') tr.scrollIntoView({block:'nearest',behavior:'smooth'}); }
+}
+function rowHTML(row) {
+  const badges = { ok:'<span class="badge badge-ok">● OK</span>', empty:'<span class="badge badge-empty">○ VACÍO</span>', processing:'<span class="badge badge-processing">⟳ BUSCANDO</span>', done:'<span class="badge badge-done">✓ LISTO</span>', error:'<span class="badge badge-error">✗ ERROR</span>' };
+  const desc = row.desc ? row.desc.replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>') : '<span style="color:var(--muted);font-style:italic">Sin descripción</span>';
+  const icon = row.status==='done'?'✓':row.status==='error'?'✗':'—';
+  return `<div class="cell cell-ref">${row.ref}</div><div class="cell" style="font-size:11px">${row.name}</div><div class="cell">${badges[row.status]||''}</div><div class="cell"><div class="desc-preview">${desc}</div></div><div class="cell">${icon}</div>`;
+}
+// ── Processing ─────────────────────────────────────────────────────────────
+async function startProcessing() {
+  if (isRunning) return;
+  isRunning = true; shouldStop = false;
+  show('progressWrap'); show('btnStop'); hide('btnStart'); hide('btnDownload');
+  const toProcess = allRows.map((r,i)=>({...r,idx:i})).filter(r=>!r.desc||r.status==='empty');
+  const refCache = {};
+  allRows.forEach(r => {
+    if (r.desc) {
+      refCache[r.ref] = {
+        desc: r.desc,
+        url_nike: r.url_nike || ''
+      };
+    }
+  });
+  log('info', `Iniciando: ${toProcess.length} referencias a procesar`);
+  const delay = (parseInt(document.getElementById('delayInput').value)||2) * 1000;
+  let done = 0;
+  for (const item of toProcess) {
+    if (shouldStop) { log('info','Detenido por el usuario'); break; }
+    const idx = item.idx;
+    // Copiar de referencias duplicadas
+    if (refCache[item.ref]) {
+      allRows[idx].desc = refCache[item.ref].desc;
+      allRows[idx].url_nike = refCache[item.ref].url_nike || '';
+      allRows[idx].status = 'done';
+      allRows[idx].exportStatus = 'OK';
+      updateRow(idx);
+      done++;
+      updateProgress(done, toProcess.length, `[CACHÉ] ${item.ref}`);
+      updateStats();
+      log('ok', `${item.ref} → copiado de referencia duplicada`);
+      continue;
+    }
+    // Marcar como procesando
+    allRows[idx].status = 'processing';
+    updateRow(idx);
+    updateProgress(done, toProcess.length, `Buscando: ${item.ref} — ${item.name}`);
+    try {
+      const result = await fetchDesc(item.ref, item.name);
+      if (result.status === 'OK' && result.description) {
+        allRows[idx].desc = result.description;
+        allRows[idx].url_nike = result.url_nike || '';
+        allRows[idx].status = 'done';
+        allRows[idx].exportStatus = 'OK';
+        refCache[item.ref] = {
+          desc: result.description,
+          url_nike: result.url_nike || ''
+        };
+        log('ok', `${item.ref} → OK`);
+      } else {
+        allRows[idx].status = 'error';
+        allRows[idx].exportStatus = 'NO ENCONTRADO';
+        allRows[idx].url_nike = '';
+        log('err', `${item.ref} → NO ENCONTRADO`);
+      }
+    } catch(err) {
+      allRows[idx].status = 'error';
+      allRows[idx].exportStatus = 'ERROR';
+      allRows[idx].url_nike = '';
+      log('err', `${item.ref} → ${err.message}`);
+    }
+    updateRow(idx); done++;
+    updateProgress(done, toProcess.length, `Procesado: ${item.ref}`);
+    updateStats();
+    if (done < toProcess.length) await sleep(delay);
+  }
+  isRunning = false;
+  hide('btnStop'); show('btnStart'); show('btnDownload');
+  updateProgress(toProcess.length, toProcess.length, `✓ Completado — ${done}/${toProcess.length} procesados`);
+  log('info', `Proceso finalizado. ${allRows.filter(r=>r.status==='error').length} errores.`);
+}
+function stopProcessing() { shouldStop = true; }
+async function fetchDesc(ref, name) {
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, name })
+  });
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `HTTP ${res.status}`);
+  }
+  return data;
+}
+// ── Download ───────────────────────────────────────────────────────────────
+function downloadExcel() {
+  const wb = XLSX.utils.book_new();
+  const wsData = [[
+    'reference',
+    'name',
+    'description',
+    'status',
+    'url_nike'
+  ], ...allRows.map(r => [
+    r.ref,
+    r.name,
+    r.desc || '',
+    r.exportStatus || '',
+    r.url_nike || ''
+  ])];
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [
+    { wch: 16 },
+    { wch: 36 },
+    { wch: 80 },
+    { wch: 18 },
+    { wch: 60 }
+  ];
+  XLSX.utils.book_append_sheet(wb, ws, 'Hoja1');
+  XLSX.writeFile(wb, `DATA_NIKE_UPDATED_${new Date().toISOString().slice(0,10)}.xlsx`);
+  log('info','Excel descargado');
+}
+// ── Utils ──────────────────────────────────────────────────────────────────
+function resetAll() {
+  allRows=[]; document.getElementById('fileInput').value='';
+  document.getElementById('fileName').textContent='SIN ARCHIVO';
+  document.getElementById('fileDot').className='dot';
+  ['statsRow','controlsWrap','tableWrap','logPanel','progressWrap','btnStop','btnDownload'].forEach(hide);
+  show('uploadZone');
+  document.getElementById('logPanel').innerHTML='';
+}
+function updateProgress(done,total,msg){
+  const pct=total>0?Math.round(done/total*100):0;
+  document.getElementById('progressFill').style.width=pct+'%';
+  document.getElementById('progressLabel').textContent=`${pct}% — ${msg}`;
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function show(id){document.getElementById(id)?.classList.remove('hidden');}
+function hide(id){document.getElementById(id)?.classList.add('hidden');}
+function log(type,msg){
+  const p=document.getElementById('logPanel');
+  const l=document.createElement('div'); l.className='log-line';
+  const t=new Date().toTimeString().slice(0,8);
+  l.innerHTML=`<span class="log-time">${t}</span><span class="log-${type}">${msg}</span>`;
+  p.appendChild(l); p.scrollTop=p.scrollHeight;
+}
+log('info','Sistema listo — carga tu archivo Excel para comenzar');
+</script>
+</body>
+</html>
